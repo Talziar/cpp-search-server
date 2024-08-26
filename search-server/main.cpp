@@ -118,8 +118,8 @@ class SearchServer {
         return query;
     }
     
-    double calculateIDF(const int matched_documents_count) const{
-        return log((document_count_ * 1.) / matched_documents_count);
+    double CalculateIDF(const string &word) const{
+        return log((document_count_ * 1.) / static_cast<int>(word_to_document_freqs_.at(word).size()));
     }
 
     vector<Document> FindAllDocuments(const Query &query) const {
@@ -128,7 +128,7 @@ class SearchServer {
 
         for (const string &word : query.plus_words) {
             if (word_to_document_freqs_.contains(word)) {
-                double idf = calculateIDF(word_to_document_freqs_.at(word).size());
+                double idf = CalculateIDF(word);
                 for (const auto &[id, tf] : word_to_document_freqs_.at(word)) {
                     plus_words_tf_idf[id] += idf * tf;
                 }
