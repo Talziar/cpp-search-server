@@ -55,9 +55,9 @@ class SearchServer {
 
     void AddDocument(int document_id, const string &document) {
         vector<string> document_words = SplitIntoWordsNoStop(document);
-        int doc_size = static_cast<int>(document_words.size());
+        double tf_increment = 1. / static_cast<int>(document_words.size());
         for (const string &word : document_words) {
-            word_to_document_freqs_[word][document_id] += 1./doc_size;
+            word_to_document_freqs_[word][document_id] += tf_increment;
         }
         ++document_count_;
     }
@@ -117,6 +117,10 @@ class SearchServer {
         }
         return query;
     }
+    
+    double calculateIDF(const int matched_documents_count) const{
+        return log((document_count_ * 1.) / matched_documents_count);
+    }
 
     vector<Document> FindAllDocuments(const Query &query) const {
         vector<Document> found_documents;
@@ -124,7 +128,7 @@ class SearchServer {
 
         for (const string &word : query.plus_words) {
             if (word_to_document_freqs_.contains(word)) {
-                double idf = log((document_count_ * 1.) / static_cast<int>(word_to_document_freqs_.at(word).size()));
+                double idf = calculateIDF(word_to_document_freqs_.at(word).size());
                 for (const auto &[id, tf] : word_to_document_freqs_.at(word)) {
                     plus_words_tf_idf[id] += idf * tf;
                 }
