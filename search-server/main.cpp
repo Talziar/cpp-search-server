@@ -2,6 +2,7 @@
 #include <cmath>
 #include <iostream>
 #include <map>
+#include <numeric>
 #include <optional>
 #include <set>
 #include <string>
@@ -84,10 +85,10 @@ public:
     template <typename StringContainer>
     explicit SearchServer(const StringContainer& stop_words)
         : stop_words_(MakeUniqueNonEmptyStrings(stop_words)) {
-            for (const string& word : stop_words){
-                if (!IsValidText(word)) {
-                    throw invalid_argument("Invalid stop_words"s);
-                }
+            if (any_of(begin(stop_words), end(stop_words), [](const string& word){
+                return !IsValidText(word);
+            })){
+                throw invalid_argument("Invalid stop_words"s);
             }
     }
 
@@ -113,15 +114,12 @@ public:
             word_to_document_freqs_[word][document_id] += inv_word_count;
         }
         documents_.emplace(document_id, DocumentData{ComputeAverageRating(ratings), status});
-        document_ids_.push_back(document_id);
+        document_ids_set_.insert(document_id);
+        document_ids_vector_.push_back(document_id);
     }
 
     template <typename DocumentPredicate>
     vector<Document> FindTopDocuments(const string& raw_query, DocumentPredicate document_predicate) const {
-        if (!IsValidQuery(raw_query)) {
-            throw invalid_argument("Invalid query"s);
-        }
-        
         const Query query = ParseQuery(raw_query);
         auto matched_documents = FindAllDocuments(query, document_predicate);
 
@@ -155,14 +153,10 @@ public:
     }
     
     int GetDocumentId(int order_number) const {
-        return document_ids_.at(order_number);
+        return document_ids_vector_.at(order_number);
     }
 
     tuple<vector<string>, DocumentStatus> MatchDocument(const string& raw_query, int document_id) const {
-        if (!IsValidQuery(raw_query)) {
-            throw invalid_argument("Invalid query"s);
-        }
-        
         const Query query = ParseQuery(raw_query);
         vector<string> matched_words;
         
@@ -195,7 +189,8 @@ private:
     const set<string> stop_words_;
     map<string, map<int, double>> word_to_document_freqs_;
     map<int, DocumentData> documents_;
-    vector<int> document_ids_;
+    vector<int> document_ids_vector_;
+    set<int> document_ids_set_;
     
     static bool IsValidText(const string& text) {
         return none_of(begin(text), end(text), [](char c) {
@@ -204,19 +199,7 @@ private:
     }
     
     bool IsValidDocumentId(int document_id) const {
-        return (document_id >= 0 && find(begin(document_ids_), end(document_ids_), document_id) == end(document_ids_));
-    }
-    
-    static bool IsValidQuery(const string& raw_query) {
-        if (!IsValidText(raw_query)) {
-            return false;
-        }
-        for (const string& word : SplitIntoWords(raw_query)){
-            if (word == "-"s || word.substr(0, 2) == "--"s){
-                return false;
-            }
-        }
-        return true;
+        return (document_id >= 0 && !document_ids_set_.contains(document_id));
     }
 
     bool IsStopWord(const string& word) const {
@@ -237,11 +220,7 @@ private:
         if (ratings.empty()) {
             return 0;
         }
-        int rating_sum = 0;
-        for (const int rating : ratings) {
-            rating_sum += rating;
-        }
-        return rating_sum / static_cast<int>(ratings.size());
+        return accumulate(begin(ratings), end(ratings), 0) / static_cast<int>(ratings.size());
     }
 
     struct QueryWord {
@@ -250,14 +229,17 @@ private:
         bool is_stop;
     };
 
-    QueryWord ParseQueryWord(string text) const {
-        bool is_minus = false;
-        // Word shouldn't be empty
-        if (text[0] == '-') {
-            is_minus = true;
-            text = text.substr(1);
+    QueryWord ParseQueryWord(string word) const {
+        if (word == "-"s || (word.size() > 1u && word.substr(0, 2) == "--"s)){
+            throw invalid_argument("Invalid query"s);;
         }
-        return {text, is_minus, IsStopWord(text)};
+        
+        bool is_minus = false;
+        if (word[0] == '-') {
+            is_minus = true;
+            word = word.substr(1);
+        }
+        return {word, is_minus, IsStopWord(word)};
     }
 
     struct Query {
@@ -266,6 +248,9 @@ private:
     };
 
     Query ParseQuery(const string& text) const {
+        if (!IsValidText(text)) {
+            throw invalid_argument("Invalid query"s);;
+        }
         Query query;
         for (const string& word : SplitIntoWords(text)) {
             const QueryWord query_word = ParseQueryWord(word);
