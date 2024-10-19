@@ -97,10 +97,6 @@ int SearchServer::ComputeAverageRating(const vector<int>& ratings) {
 
 
 SearchServer::QueryWord SearchServer::ParseQueryWord(const string& text) const {
-    if (text.empty()) {
-        throw invalid_argument("Query word is empty"s);
-    }
-    
     string word = text;
     bool is_minus = false;
     if (word[0] == '-') {
